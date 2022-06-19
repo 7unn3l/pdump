@@ -7,6 +7,22 @@ use nix::sys::wait::waitpid;
 use nix::sys::personality;
 use nix::sys::personality::Persona;
 
+enum Endianess{
+    Big,
+    Little
+}
+
+const MAGIC: [u8;4] = [0x7f,0x45,0x4c,0x46];
+
+fn get_endianess() -> Endianess{
+    let var :u16 = 1;
+
+    if var as u8 == 1{
+        return Endianess::Little;
+    }
+    return Endianess::Big;
+}
+
 fn child_setup(elf:&str){
 
     personality::set(Persona::ADDR_NO_RANDOMIZE).expect("setting persona did not work!");
@@ -21,10 +37,7 @@ fn child_setup(elf:&str){
         let argv: &[*const c_char] = &[elf.as_ptr(), elf.as_ptr(), ptr::null()];
         let envp: &[*const c_char] = &[ptr::null()];
 
-        match ptrace::traceme(){
-            Err(e) => print!("tracme error: {}",e.desc()),
-            other => {}
-        }
+        ptrace::traceme().expect("could not issue traceme!");
 
         // due to traceme(), we will stop at this execve
         execve(elf.as_ptr(),&argv[0],&envp[0]);
@@ -38,18 +51,33 @@ fn search_elf_header(pid: Pid,entry_rip: u64){
     search until ELF header is found. Validate via
     signature and entrypoint
     */
+
+    let endianess =  get_endianess();
+
     let mut addr: u64 = 0;
     loop{
-
         let result: i64 = match ptrace::read(pid,addr as *mut _){
             Ok(val) => val,
-            Err(err) => 0
+            Err(_) => {
+                // we might not be ata valid addr, skip this.
+                addr += 8;
+                continue;
+            }
         };
 
-        result.to_be();
 
         if result != 0{
-            println!("YUH! : {:?}",result.to_le_bytes().from);
+            let result = match endianess{
+                Endianess::Big => result.to_be_bytes(),
+                Endianess::Little => result.to_le_bytes()
+            };
+            
+            // todo: iterators, closures
+            match result.windows(4).position(|window| window == MAGIC){
+                Some(index) => println!("found at index {}, total addr is {}",index,addr+index as u64),
+                None => {}
+            }
+
             break;
         }
         
@@ -62,7 +90,7 @@ fn dump_child(pid:Pid){
     println!("dumping child with pid = {}",pid);
     
     match waitpid(pid,None){
-        Ok(res) => {println!("ok: {:?}",res)},
+        Ok(res) => {println!("target binary stopped: {:?}",res)},
         Err(err) => print!("errror while waitpid: {}",err.desc())
     }
 
