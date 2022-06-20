@@ -50,7 +50,7 @@ fn child_setup(elf:&str){
     return;
 }
 
-fn search_elf_header(pid: Pid,entry_rip: u64,start:u64) -> Option<(u64,u64)>{
+fn search_elf_header(pid: Pid,start:u64) -> Option<(u64,u64)>{
     println!("conducting search for ELF header. Starting at 0x{:x?}...",start);
     /*
     search until ELF header is found. Validate via
@@ -145,7 +145,7 @@ fn dump_child(pid:Pid){
     
 
     // Use start to sepcify a starting point for memory search
-    let (elf_start,elf_end) = match search_elf_header(pid,current_rip,0x555555550000){
+    let (elf_start,elf_end) = match search_elf_header(pid,0x555555550000){
         Some(x) => x,
         None => {
             println!("could not find ELF header in memory");
@@ -160,15 +160,22 @@ fn dump_child(pid:Pid){
         Ok(file) => file,
     };
 
-    for n in 0..required_reads{
-        let addr = elf_start+n*8;
-
+    let mut addr : u64 = elf_start;
+    let mut toread = required_reads;
+    
+    while toread != 3{
+        
         let buf = match ptrace::read(pid,addr as *mut _){
             Ok(x) => x.to_le_bytes(),
-            Err(_) => {continue}
+            Err(_) => {
+                // maybe this is not mapped. skipt it and read next addr.
+                addr += 8;continue;
+            }
         };
-
+        
         file.write(&buf).expect("could not write to ./dump");
+        addr += 8;
+        toread -= 1;
     }
 
     println!("finished. see ./dump");
