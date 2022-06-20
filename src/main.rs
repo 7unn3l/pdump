@@ -90,30 +90,34 @@ fn search_elf_header(pid: Pid,entry_rip: u64,start:u64) -> Option<(u64,u64)>{
                 
                 println!("found a possible ELF header at memory 0x{:x?}",elf_start);
                 
+                
+                /* 
+                ------
+
+                used to validate ELF header by comparing entrypoint with start RIP, this
+                does not work for PIE binaries.
+                
+                -----
+
                 let parsed_entry: i64 = ptrace::read(pid,(elf_start+24) as *mut _).unwrap();
 
                 println!("parsed entry: 0x{:x?}, rip = 0x{:x?}",parsed_entry,entry_rip);
-
-                if parsed_entry != entry_rip as i64{
-
-                    /* 
-                    We verified the ELF header. Now calculate size of the binary
-                    in memory via section header table offset.
-                    */
                 
-                    let offset_sect_headers: u64 = ptrace::read(pid,(elf_start+40) as *mut _).unwrap() as u64;
-                    let size_sect_header = ptrace::read(pid,(elf_start+58) as *mut _).unwrap() as u16;
-                    let num_sect_headers = ptrace::read(pid,(elf_start+60) as *mut _).unwrap() as u16;
+                if parsed_entry != entry_rip as i64{
+                */
+            
+                let offset_sect_headers: u64 = ptrace::read(pid,(elf_start+40) as *mut _).unwrap() as u64;
+                let size_sect_header = ptrace::read(pid,(elf_start+58) as *mut _).unwrap() as u16;
+                let num_sect_headers = ptrace::read(pid,(elf_start+60) as *mut _).unwrap() as u16;
 
-                    println!("section header size: {}",size_sect_header);
+                println!("section header size: {}",size_sect_header);
 
-                    let size_sect_headers = size_sect_header*num_sect_headers;
-                    let total_bin_size: u64 = offset_sect_headers+size_sect_headers as u64;
+                let size_sect_headers = size_sect_header*num_sect_headers;
+                let total_bin_size: u64 = offset_sect_headers+size_sect_headers as u64;
 
-                    println!("header valid. Binary size = 0x{:x?} bytes",total_bin_size);
+                println!("header valid. Binary size = 0x{:x?} bytes",total_bin_size);
 
-                    return Some((elf_start,elf_start+total_bin_size));
-                }
+                return Some((elf_start,elf_start+total_bin_size));
 
             },
             None => {}
