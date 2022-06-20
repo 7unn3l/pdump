@@ -163,7 +163,7 @@ fn dump_child(pid:Pid){
     let mut addr : u64 = elf_start;
     let mut toread = required_reads;
     
-    while toread != 3{
+    while toread > 0{
         
         let buf = match ptrace::read(pid,addr as *mut _){
             Ok(x) => x.to_le_bytes(),
